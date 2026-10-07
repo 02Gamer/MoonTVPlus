@@ -2547,6 +2547,31 @@ function PlayPageClient() {
   const artRef = useRef<HTMLDivElement | null>(null);
   // 换集重建播放器前记住网页全屏状态，新播放器 ready 后恢复
   const restoreWebFullscreenOnReadyRef = useRef(false);
+
+  // iOS PWA 自绘全屏：见 globals.css 的 .ios-pwa-immersive。
+  // 容器（artRef 的父级）是 JSX 里的固定节点，跨换集重建不换，所以类名能留着不丢全屏。
+  const isImmersiveFullscreen = () =>
+    !!artRef.current?.parentElement?.classList.contains('ios-pwa-immersive');
+  const enterImmersiveFullscreen = () => {
+    const wrap = artRef.current?.parentElement;
+    if (!wrap) return;
+    wrap.classList.add('ios-pwa-immersive');
+    document.body.style.overflow = 'hidden';
+    // 尺寸变了，催播放器重算（弹幕画布、Anime4K 画布都依赖 resize）
+    window.dispatchEvent(new Event('resize'));
+  };
+  const exitImmersiveFullscreen = () => {
+    artRef.current?.parentElement?.classList.remove('ios-pwa-immersive');
+    document.body.style.removeProperty('overflow');
+    window.dispatchEvent(new Event('resize'));
+  };
+  // 卸载兜底：用户在全屏里直接返回时，把 body 滚动锁和类名清掉
+  useEffect(() => {
+    return () => {
+      artRef.current?.parentElement?.classList.remove('ios-pwa-immersive');
+      document.body.style.removeProperty('overflow');
+    };
+  }, []);
   const activeHarmonyHlsPlaybackModeRef =
     useRef<HarmonyHlsPlaybackMode | null>(null);
   const activeNetdiskHlsPlaybackModeRef =
@@ -8844,18 +8869,14 @@ function PlayPageClient() {
                   return;
                 }
 
-                // 如果在 PWA 模式下，直接使用容器全屏（可以隐藏状态栏）
+                // PWA 下自绘全屏：iPhone 上 requestFullscreen 对普通元素无效；
+                // 原来这里调 $container.webkitEnterFullscreen() 是死代码（div 没这方法），
+                // 恒为假 → 永远退化成 fullscreenWeb → 竖屏不转、画面缩在中间。
                 if (isPWA) {
-                  const container = artPlayerRef.current.template.$container;
-                  if (container && container.webkitEnterFullscreen) {
-                    container.webkitEnterFullscreen().catch((err: Error) => {
-                      console.error('PWA 全屏失败:', err);
-                      // 如果失败，降级使用网页全屏
-                      artPlayerRef.current.fullscreenWeb = true;
-                    });
+                  if (isImmersiveFullscreen()) {
+                    exitImmersiveFullscreen();
                   } else {
-                    // 不支持原生全屏，使用网页全屏
-                    artPlayerRef.current.fullscreenWeb = true;
+                    enterImmersiveFullscreen();
                   }
                   return;
                 }
