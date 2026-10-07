@@ -52,6 +52,16 @@
 
 :root {
   --foreground-rgb: 255, 255, 255;
+  /* 顶部安全区：只在"装到主屏(独立窗口)"的沉浸式场景才留。
+     普通浏览器里状态栏在视口之外，但升级后的部分 WebView 仍会上报
+     env(safe-area-inset-top)，直接照用会凭空多出一条留白。 */
+  --safe-top: 0px;
+}
+
+@media (display-mode: standalone) {
+  :root {
+    --safe-top: env(safe-area-inset-top);
+  }
 }
 
 html,
