@@ -43,6 +43,15 @@ const LOCAL_CSS = `
   --accent-2: var(--theme-primary-hover, #059669);
   --accent-ink:#04140d; --player:#05070c; --scrim:rgba(10,12,18,.55); --radius:14px;
   position: fixed; inset: 0; overflow: hidden; background: var(--player); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  /* "手机屏"的宽：竖屏时就是整屏宽；宽屏（PC / 横屏）按高度算 9:16 居中，两侧留黑。
+     抽屉也按这个宽度收进来，不然竖列居中、抽屉却横跨整个显示器。
+     --col-num 是画面宽高比（默认竖屏 9:16）；横屏视频由 JS 按视频实际比例覆盖，
+     机位框跟着变宽，画面才不会被 9:16 的框裁成一条竖条。 */
+  --col-num: 0.5625;
+  --col-w: min(100vw, calc(100vh * var(--col-num)));
+  --col-w: min(100vw, calc(100dvh * var(--col-num)));
+  --col-x: calc((100vw - var(--col-w)) / 2);
   font-family: "Noto Sans SC", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased; overscroll-behavior: none;
 }
@@ -61,7 +70,10 @@ const LOCAL_CSS = `
   --player:#000000; --scrim:rgba(0,0,0,.62);
 }
 #djplayer, #djplayer * { box-sizing: border-box; }
-#djplayer .touchguard { position:absolute; inset:0; touch-action:none; user-select:none; }
+/* touchguard 就是"手机屏"：宽度取 --col-w（竖屏满宽 / 宽屏居中 9:16 竖列）。
+   播放层的浮层（顶栏/右栏/底栏/菜单/toast）用 absolute 钉在这块屏上——
+   抽屉在外面（要能滚），单独按 --col-x 收进来。 */
+#djplayer .touchguard { position:relative; flex:none; width:var(--col-w); max-width:100%; height:100%; touch-action:none; user-select:none; }
 
 /* 播放层：竖排轨道。每一集是一个占满屏的 eslot，按集号固定偏移 ep*100%，
    轨道整体按 -当前集*100% 平移；拖动时叠加手指位移，松手做 300ms 过渡。
@@ -70,13 +82,16 @@ const LOCAL_CSS = `
 #djplayer .track { position:absolute; inset:0; will-change: transform; }
 #djplayer .eslot { position:absolute; inset:0; overflow:hidden; background:#000; }
 #djplayer .eslot video { width:100%; height:100%; object-fit:cover; display:block; }
+/* 横屏/方屏视频：机位框已经按视频比例收窄了，画面按原比例完整显示，别再裁。
+   （竖屏短剧那条路保持 cover，铺满整屏才是红果那种观感） */
+#djplayer.fit .eslot video { object-fit: contain; }
 
 /* 本页是整屏播放器：锁住文档滚动，别让页面能滚走顶栏 */
 html:has(#djplayer), body:has(#djplayer) { height:100%; overflow:hidden; overscroll-behavior:none; }
 
 /* 顶栏 */
 #djplayer .top {
-  position:fixed; top:0; left:0; right:0; z-index:4; display:flex; align-items:center; gap:10px;
+  position:absolute; top:0; left:0; right:0; z-index:4; display:flex; align-items:center; gap:10px;
   padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 10px;
   background: linear-gradient(180deg, rgba(0,0,0,0.62), transparent);
 }
@@ -93,7 +108,7 @@ html:has(#djplayer), body:has(#djplayer) { height:100%; overflow:hidden; overscr
 
 /* 右侧操作列 */
 #djplayer .rail {
-  position:fixed; right:10px; bottom:128px; z-index:6; display:flex; flex-direction:column; gap:16px;
+  position:absolute; right:10px; bottom:128px; z-index:6; display:flex; flex-direction:column; gap:16px;
   transition: opacity .25s ease, transform .25s ease;
 }
 #djplayer .railbtn {
@@ -131,7 +146,7 @@ html:has(#djplayer), body:has(#djplayer) { height:100%; overflow:hidden; overscr
 
 /* 底部信息 + 进度 */
 #djplayer .bottom {
-  position:fixed; left:0; right:0; bottom:0; z-index:4;
+  position:absolute; left:0; right:0; bottom:0; z-index:4;
   padding: 34px 14px calc(16px + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(0deg, rgba(0,0,0,0.86) 12%, rgba(0,0,0,0.42) 62%, transparent);
 }
@@ -200,7 +215,7 @@ html:has(#djplayer), body:has(#djplayer) { height:100%; overflow:hidden; overscr
 
 /* 右上角「更多」菜单 */
 #djplayer .menu {
-  position:fixed; top: calc(52px + env(safe-area-inset-top, 0px)); right:12px; z-index:7; width:194px;
+  position:absolute; top: calc(52px + env(safe-area-inset-top, 0px)); right:12px; z-index:7; width:194px;
   background: rgba(18,20,26,0.96); backdrop-filter: blur(10px);
   border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:6px;
   display:none; box-shadow:0 16px 40px -18px rgba(0,0,0,0.85);
@@ -227,7 +242,7 @@ html:has(#djplayer), body:has(#djplayer) { height:100%; overflow:hidden; overscr
 #djplayer .sw.on { background: var(--accent); }
 #djplayer .sw.on::after { transform: translateX(16px); }
 #djplayer .toast {
-  position:fixed; left:50%; bottom:128px; z-index:9; transform: translate(-50%, 8px);
+  position:absolute; left:50%; bottom:128px; z-index:9; transform: translate(-50%, 8px);
   background: rgba(0,0,0,0.82); color:#fff; font-size:12.5px; padding:8px 14px;
   border-radius:999px; opacity:0; pointer-events:none; white-space:nowrap;
   border:1px solid rgba(255,255,255,0.12); transition: opacity .2s, transform .2s;
@@ -236,15 +251,15 @@ html:has(#djplayer), body:has(#djplayer) { height:100%; overflow:hidden; overscr
 
 /* 抽屉：窄屏底部弹 / 宽屏右侧拉 */
 #djplayer .scrim {
-  position:fixed; inset:0; z-index:40; background: var(--scrim);
+  position:absolute; inset:0; z-index:40; background: var(--scrim);
   opacity:0; pointer-events:none; transition: opacity .28s;
 }
 #djplayer .scrim.on { opacity:1; pointer-events:auto; }
 #djplayer .drawer {
-  position:fixed; z-index:41; background: var(--surface); color: var(--fg);
+  position:absolute; z-index:41; background: var(--surface); color: var(--fg);
   display:flex; flex-direction:column; box-shadow:0 -18px 50px -20px rgba(0,0,0,0.6);
   transition: transform .3s cubic-bezier(.2,.8,.25,1);
-  inset: auto 0 0 0; max-height:78vh; border-radius:18px 18px 0 0; transform: translateY(101%);
+  inset: auto var(--col-x) 0 var(--col-x); max-height:78vh; border-radius:18px 18px 0 0; transform: translateY(101%);
 }
 #djplayer .drawer.on { transform: translateY(0); }
 #djplayer .drawer .dhead {
@@ -264,8 +279,11 @@ html:has(#djplayer), body:has(#djplayer) { height:100%; overflow:hidden; overscr
 }
 @media (min-width: 821px) {
   #djplayer .drawer {
-    inset: 0 0 0 auto; width:380px; max-height:none;
-    border-radius:0; transform: translateX(101%);
+    inset: 0 var(--col-x) 0 auto; width: min(380px, var(--col-w)); max-height:none;
+    /* 关闭位必须「挪出视口」，不是「挪出自己的宽度」：抽屉右边缘是缩进 --col-x 的，
+       只 translateX(100%) 的话它只是停在竖列右边那条黑边里、整块常驻可见
+       （三个抽屉同位，最后渲染的详情盖在最上面）。所以要连 --col-x 一起挪掉。 */
+    border-radius:0; transform: translateX(calc(100% + var(--col-x) + 24px));
     box-shadow: -18px 0 50px -24px rgba(0,0,0,0.6);
   }
   #djplayer .drawer .grab { display:none; }
@@ -612,6 +630,8 @@ function DuanjuPlayClient() {
   const [pendingSeekRatio, setPendingSeekRatio] = useState<number | null>(null);
   // 当前集还没到可播状态（首次加载 / 卡顿缓冲）时给加载指示
   const [videoLoading, setVideoLoading] = useState(true);
+  // 当前集画面的宽高比（0 = 还不知道）。短剧不全是竖的，有些源是横屏的。
+  const [videoAr, setVideoAr] = useState(0);
 
   const [sources, setSources] = useState<SearchResult[]>([]);
   const [srcInfo, setSrcInfo] = useState<Record<string, SrcInfo>>({});
@@ -1001,8 +1021,16 @@ function DuanjuPlayClient() {
       }
       setDuration(v.duration || 0);
     };
+    // 画面比例会决定「机位框」多宽（竖屏 9:16 / 横屏按视频自己），
+    // HLS 中途切码率也可能换分辨率，所以 resize 也要跟着更新
+    const syncAr = () => {
+      if (v.videoWidth > 0 && v.videoHeight > 0) {
+        setVideoAr(v.videoWidth / v.videoHeight);
+      }
+    };
     const onMeta = () => {
       setDuration(v.duration || 0);
+      syncAr();
       applyResume();
     };
     const onPlay = () => setPlaying(true);
@@ -1056,6 +1084,7 @@ function DuanjuPlayClient() {
     };
     v.addEventListener('timeupdate', onTime);
     v.addEventListener('loadedmetadata', onMeta);
+    v.addEventListener('resize', syncAr);
     v.addEventListener('play', onPlay);
     v.addEventListener('pause', onPause);
     v.addEventListener('ended', onEnded);
@@ -1071,6 +1100,7 @@ function DuanjuPlayClient() {
     return () => {
       v.removeEventListener('timeupdate', onTime);
       v.removeEventListener('loadedmetadata', onMeta);
+      v.removeEventListener('resize', syncAr);
       v.removeEventListener('play', onPlay);
       v.removeEventListener('pause', onPause);
       v.removeEventListener('ended', onEnded);
@@ -1460,11 +1490,10 @@ function DuanjuPlayClient() {
       moved: false,
       skip: !!t.closest('.rail, .bottom, .top, .menu, .seek, .drawer'),
     };
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* noop */
-    }
+    // 这里**不能** setPointerCapture：鼠标按下就捕获的话，pointerup 被改派到
+    // touchguard，click 会落到 mousedown/up 的公共祖先（也就是 touchguard）上，
+    // 按钮自己的 onClick 永远收不到——PC 上整个页面的按钮全点不动（触屏是浏览器
+    // 另外合成的 click，所以只有 PC 中招）。等真的拖起来了再捕获。
   }, []);
 
   const onTouchMove = useCallback(
@@ -1473,6 +1502,16 @@ function DuanjuPlayClient() {
       if (!d.active) return;
       const dy = e.clientY - d.startY;
       if (Math.abs(dy) > 6) d.moved = true;
+      // 开始拖了才捕获指针：拖出元素范围也能继续跟手
+      if (d.moved) {
+        try {
+          if (!e.currentTarget.hasPointerCapture(e.pointerId)) {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }
+        } catch {
+          /* noop */
+        }
+      }
       const idx = episodeIndexRef.current;
       const total = detailRef.current?.episodes?.length || 0;
       const atEdge = (dy < 0 && idx >= total - 1) || (dy > 0 && idx <= 0);
@@ -1586,10 +1625,17 @@ function DuanjuPlayClient() {
     );
   }
 
+  // 画面宽高比决定「手机屏」多宽：竖屏短剧 9:16（cover 铺满）；
+  // 比 9:16 还宽的画面（横屏短剧、方屏）按视频自身比例定宽 + contain 完整显示。
+  const TALL_AR = 9 / 16;
+  const videoWide = videoAr > TALL_AR;
+  const frameNum = videoWide ? Math.min(videoAr, 4) : TALL_AR;
+
   return (
     <div
       id='djplayer'
-      className={`${clean ? 'clean' : ''} ${playing ? '' : 'paused'} ${loading || videoLoading ? 'loading' : ''}`}
+      className={`${clean ? 'clean' : ''} ${playing ? '' : 'paused'} ${loading || videoLoading ? 'loading' : ''}${videoWide ? ' fit' : ''}`}
+      style={{ '--col-num': String(frameNum) } as React.CSSProperties}
     >
       <style dangerouslySetInnerHTML={{ __html: LOCAL_CSS }} />
 
