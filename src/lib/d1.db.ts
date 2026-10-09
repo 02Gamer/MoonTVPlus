@@ -51,17 +51,19 @@ export class D1Storage implements IStorage {
 
   constructor(adapter: DatabaseAdapter) {
     this.db = adapter;
-    this.schemaReady = this.ensureMangaShelfColumns();
+    this.schemaReady = this.ensureExtraColumns();
     // 创建 Redis Hash 兼容适配器用于设备管理
     this.adapter = new RedisHashAdapter(adapter);
   }
 
-  private async ensureMangaShelfColumns(): Promise<void> {
+  /** 补齐历史库缺的列（新库由 migrations/*.sql 一次建全） */
+  private async ensureExtraColumns(): Promise<void> {
     const statements = [
       'ALTER TABLE manga_shelf ADD COLUMN latest_chapter_id TEXT',
       'ALTER TABLE manga_shelf ADD COLUMN latest_chapter_name TEXT',
       'ALTER TABLE manga_shelf ADD COLUMN latest_chapter_count INTEGER',
       'ALTER TABLE manga_shelf ADD COLUMN unread_chapter_count INTEGER',
+      'ALTER TABLE play_records ADD COLUMN is_duanju INTEGER DEFAULT 0',
     ];
 
     for (const statement of statements) {
@@ -73,14 +75,14 @@ export class D1Storage implements IStorage {
           !/duplicate column|already exists/i.test(result.error)
         ) {
           console.warn(
-            'D1Storage.ensureMangaShelfColumns warning:',
+            'D1Storage.ensureExtraColumns warning:',
             result.error
           );
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (!/duplicate column|already exists|no such table/i.test(message)) {
-          console.warn('D1Storage.ensureMangaShelfColumns warning:', err);
+          console.warn('D1Storage.ensureExtraColumns warning:', err);
         }
       }
     }
@@ -113,15 +115,17 @@ export class D1Storage implements IStorage {
     record: PlayRecord
   ): Promise<void> {
     try {
+      // 老库可能还没建 is_duanju 列，等补齐再写
+      await this.schemaReady;
       await this.db
         .prepare(
           `
           INSERT INTO play_records (
             username, key, title, source_name, cover, year,
             episode_index, total_episodes, play_time, total_time,
-            save_time, search_title, new_episodes, is_anime
+            save_time, search_title, new_episodes, is_anime, is_duanju
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(username, key) DO UPDATE SET
             title = excluded.title,
             source_name = excluded.source_name,
@@ -134,7 +138,8 @@ export class D1Storage implements IStorage {
             save_time = excluded.save_time,
             search_title = excluded.search_title,
             new_episodes = excluded.new_episodes,
-            is_anime = excluded.is_anime
+            is_anime = excluded.is_anime,
+            is_duanju = COALESCE(excluded.is_duanju, play_records.is_duanju)
         `
         )
         .bind(
@@ -151,7 +156,9 @@ export class D1Storage implements IStorage {
           record.save_time,
           record.search_title || '',
           record.new_episodes || null,
-          record.is_anime ? 1 : 0
+          record.is_anime ? 1 : 0,
+          // undefined = 本次不表态（不是短剧页/判断不出），别冲掉已有的标记
+          record.is_duanju === undefined ? null : record.is_duanju ? 1 : 0
         )
         .run();
     } catch (err) {
@@ -1248,6 +1255,7 @@ export class D1Storage implements IStorage {
       search_title: row.search_title || '',
       new_episodes: row.new_episodes || undefined,
       is_anime: row.is_anime === 1 || row.is_anime === true,
+      is_duanju: row.is_duanju === 1 || row.is_duanju === true,
     };
   }
 

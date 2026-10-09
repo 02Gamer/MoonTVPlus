@@ -51,6 +51,8 @@ export interface PlayRecord {
   new_episodes?: number; // 新增的剧集数量（用于显示更新提示）
   /** 是否动漫（写入时根据 CMS type_name/class 判断） */
   is_anime?: boolean;
+  /** 是否短剧（短剧竖屏页写入；普通播放页按 CMS type_name/class 判断） */
+  is_duanju?: boolean;
 }
 
 // ---- 收藏类型 ----

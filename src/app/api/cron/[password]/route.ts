@@ -484,6 +484,7 @@ async function refreshRecordAndFavorites() {
                 search_title: record.search_title,
                 new_episodes: updatedNewEpisodes > 0 ? updatedNewEpisodes : undefined,
                 is_anime: record.is_anime,
+                is_duanju: record.is_duanju,
               });
               console.log(
                 `更新播放记录: ${record.title} (${record.total_episodes} -> ${episodeCount}, 新增 ${newEpisodesCount} 集)`

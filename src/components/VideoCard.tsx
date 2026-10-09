@@ -38,6 +38,7 @@ import {
 } from '@/lib/db.client';
 import { getBangumiSubjectUrl } from '@/lib/bangumi.client';
 import { isNetdiskSource } from '@/lib/netdisk/source';
+import { isDuanjuVerticalDisabled } from '@/lib/duanju.client';
 import { appendSpecialSourceParam } from '@/lib/special-source.client';
 import {
   base58Decode,
@@ -459,12 +460,15 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
           router.push(url);
         }
       } else if (actualSource && actualId) {
-        // 检测当前是否在 play 页面
+        // 短剧走竖屏沉浸播放页，其余走普通播放页（本地设置可禁用竖屏模式）
+        const playPath =
+          isDuanju && !isDuanjuVerticalDisabled() ? '/duanju/play' : '/play';
+        // 检测当前是否已在目标播放页面
         const isCurrentlyOnPlayPage =
-          typeof window !== 'undefined' && window.location.pathname === '/play';
+          typeof window !== 'undefined' && window.location.pathname === playPath;
 
         let url = appendSpecialSourceParam(
-          `/play?source=${actualSource}&id=${actualId}&title=${encodeURIComponent(
+          `${playPath}?source=${actualSource}&id=${actualId}&title=${encodeURIComponent(
             actualTitle
           )}${actualYear ? `&year=${actualYear}` : ''}${
             isAggregate ? '&prefer=true' : ''
@@ -472,9 +476,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
             actualQuery
               ? `&stitle=${encodeURIComponent(actualQuery.trim())}`
               : ''
-          }${actualSearchType ? `&stype=${actualSearchType}` : ''}${
-            isDuanju ? '&duanju=1' : ''
-          }`
+          }${actualSearchType ? `&stype=${actualSearchType}` : ''}`
         );
 
         if (isCurrentlyOnPlayPage) {
@@ -537,7 +539,9 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
         window.open(url, '_blank');
       } else if (actualSource && actualId) {
         const url = appendSpecialSourceParam(
-          `/play?source=${actualSource}&id=${actualId}&title=${encodeURIComponent(
+          `${
+            isDuanju && !isDuanjuVerticalDisabled() ? '/duanju/play' : '/play'
+          }?source=${actualSource}&id=${actualId}&title=${encodeURIComponent(
             actualTitle
           )}${actualYear ? `&year=${actualYear}` : ''}${
             isAggregate ? '&prefer=true' : ''
@@ -545,9 +549,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
             actualQuery
               ? `&stitle=${encodeURIComponent(actualQuery.trim())}`
               : ''
-          }${actualSearchType ? `&stype=${actualSearchType}` : ''}${
-            isDuanju ? '&duanju=1' : ''
-          }`
+          }${actualSearchType ? `&stype=${actualSearchType}` : ''}`
         );
         window.open(url, '_blank');
       }

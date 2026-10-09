@@ -52,17 +52,19 @@ export class PostgresStorage implements IStorage {
 
   constructor(adapter: DatabaseAdapter) {
     this.db = adapter;
-    this.schemaReady = this.ensureMangaShelfColumns();
+    this.schemaReady = this.ensureExtraColumns();
     // 创建一个简单的适配器用于设备管理
     this.adapter = new PostgresRedisHashAdapter(adapter);
   }
 
-  private async ensureMangaShelfColumns(): Promise<void> {
+  /** 补齐历史库缺的列（新库由 migrations/postgres/*.sql 一次建全） */
+  private async ensureExtraColumns(): Promise<void> {
     const statements = [
       'ALTER TABLE manga_shelf ADD COLUMN IF NOT EXISTS latest_chapter_id TEXT',
       'ALTER TABLE manga_shelf ADD COLUMN IF NOT EXISTS latest_chapter_name TEXT',
       'ALTER TABLE manga_shelf ADD COLUMN IF NOT EXISTS latest_chapter_count INTEGER',
       'ALTER TABLE manga_shelf ADD COLUMN IF NOT EXISTS unread_chapter_count INTEGER',
+      'ALTER TABLE play_records ADD COLUMN IF NOT EXISTS is_duanju INTEGER DEFAULT 0',
     ];
 
     for (const statement of statements) {
@@ -70,12 +72,12 @@ export class PostgresStorage implements IStorage {
         const result = await this.db.prepare(statement).run();
         if (!result.success && result.error) {
           console.warn(
-            'PostgresStorage.ensureMangaShelfColumns warning:',
+            'PostgresStorage.ensureExtraColumns warning:',
             result.error
           );
         }
       } catch (err) {
-        console.warn('PostgresStorage.ensureMangaShelfColumns warning:', err);
+        console.warn('PostgresStorage.ensureExtraColumns warning:', err);
       }
     }
   }
@@ -106,15 +108,17 @@ export class PostgresStorage implements IStorage {
     record: PlayRecord
   ): Promise<void> {
     try {
+      // 老库可能还没建 is_duanju 列，等补齐再写
+      await this.schemaReady;
       await this.db
         .prepare(
           `
           INSERT INTO play_records (
             username, key, title, source_name, cover, year,
             episode_index, total_episodes, play_time, total_time,
-            save_time, search_title, new_episodes, is_anime
+            save_time, search_title, new_episodes, is_anime, is_duanju
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           ON CONFLICT (username, key) DO UPDATE SET
             title = EXCLUDED.title,
             source_name = EXCLUDED.source_name,
@@ -127,7 +131,8 @@ export class PostgresStorage implements IStorage {
             save_time = EXCLUDED.save_time,
             search_title = EXCLUDED.search_title,
             new_episodes = EXCLUDED.new_episodes,
-            is_anime = EXCLUDED.is_anime
+            is_anime = EXCLUDED.is_anime,
+            is_duanju = COALESCE(EXCLUDED.is_duanju, play_records.is_duanju)
         `
         )
         .bind(
@@ -144,7 +149,9 @@ export class PostgresStorage implements IStorage {
           record.save_time,
           record.search_title || '',
           record.new_episodes || null,
-          record.is_anime ? 1 : 0
+          record.is_anime ? 1 : 0,
+          // undefined = 本次不表态（不是短剧页/判断不出），别冲掉已有的标记
+          record.is_duanju === undefined ? null : record.is_duanju ? 1 : 0
         )
         .run();
     } catch (err) {
@@ -396,6 +403,7 @@ export class PostgresStorage implements IStorage {
       search_title: row.search_title || '',
       new_episodes: row.new_episodes || undefined,
       is_anime: row.is_anime === 1 || row.is_anime === true,
+      is_duanju: row.is_duanju === 1 || row.is_duanju === true,
     };
   }
 
