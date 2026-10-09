@@ -126,6 +126,8 @@ html:has(#djplayer), body:has(#djplayer) { height:100%; overflow:hidden; overscr
   opacity:0; transform: scale(0.8); transition: opacity .25s, transform .25s;
 }
 #djplayer.paused .bigplay { opacity:1; transform: scale(1); }
+/* 加载中（未起播）只留转圈：这时 <video> 是 paused 的，不压掉播放键会和转圈叠在一起 */
+#djplayer.loading .bigplay { opacity:0; transform: scale(0.8); }
 
 /* 底部信息 + 进度 */
 #djplayer .bottom {
@@ -605,6 +607,11 @@ function DuanjuPlayClient() {
   const [seeking, setSeeking] = useState(false);
   const [seekHold, setSeekHold] = useState(false);
   const [seekRatio, setSeekRatio] = useState(0);
+  // 时长还没出来就拖动时：把比例记下来，等 loadedmetadata 再定位。
+  // 否则松手那一刻 duration 还是 0，进度条会弹回开头，等元数据到了才被顶到续播点。
+  const [pendingSeekRatio, setPendingSeekRatio] = useState<number | null>(null);
+  // 当前集还没到可播状态（首次加载 / 卡顿缓冲）时给加载指示
+  const [videoLoading, setVideoLoading] = useState(true);
 
   const [sources, setSources] = useState<SearchResult[]>([]);
   const [srcInfo, setSrcInfo] = useState<Record<string, SrcInfo>>({});
@@ -635,6 +642,11 @@ function DuanjuPlayClient() {
   const detailRef = useRef<SearchResult | null>(null);
   const episodeIndexRef = useRef(0);
   const pendingSeekRef = useRef(0);
+  const pendingSeekRatioRef = useRef<number | null>(null);
+  // 拖动/续播落点：视频真正到位前把进度条锁在这个位置。
+  // 加载中设了 currentTime 不会马上有 timeupdate，条子会被上一次的 time 拉回原位，
+  // 等数据到了才跳过去；锁住就不会来回跳。
+  const seekTargetRef = useRef<{ t: number; until: number } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const measuredRef = useRef(false);
   const customAdFilterCodeRef = useRef('');
@@ -661,6 +673,13 @@ function DuanjuPlayClient() {
     setToast(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(''), 1500);
+  }, []);
+
+  /* 跳到 t：立刻把进度条按到位，并锁住直到视频真的到了附近（或 8 秒超时放弃）。
+     加载中 currentTime 设下去不会马上回 timeupdate，光等事件条子会先弹回旧位置。 */
+  const commitSeek = useCallback((t: number) => {
+    seekTargetRef.current = { t, until: Date.now() + 8000 };
+    setTime(t);
   }, []);
 
   const progressKey = useMemo(
@@ -892,6 +911,9 @@ function DuanjuPlayClient() {
       });
       saveCurrentProgress();
       pendingSeekRef.current = resumeTimeFor(key, to);
+      pendingSeekRatioRef.current = null;
+      setPendingSeekRatio(null);
+      seekTargetRef.current = null;
 
       const h = trackRef.current?.clientHeight || window.innerHeight;
 
@@ -942,19 +964,41 @@ function DuanjuPlayClient() {
     const v = videoRefs.current[episodeIndex];
     if (!v) return;
     const boundAt = Date.now();
+    const seekTo = (t: number) => {
+      try {
+        v.currentTime = t;
+      } catch {
+        /* noop */
+      }
+      commitSeek(t);
+    };
     const applyResume = () => {
+      // 加载中拖过的位置优先于续播点：用户明确指到哪儿就去哪儿
+      const ratio = pendingSeekRatioRef.current;
+      if (ratio != null && Number.isFinite(v.duration) && v.duration > 0) {
+        pendingSeekRatioRef.current = null;
+        setPendingSeekRatio(null);
+        seekTo(ratio * v.duration);
+        return;
+      }
       const target = pendingSeekRef.current;
       if (target > 1) {
         pendingSeekRef.current = 0;
-        try {
-          if (Number.isFinite(v.duration) && target < v.duration) v.currentTime = target;
-        } catch {
-          /* noop */
-        }
+        if (Number.isFinite(v.duration) && target < v.duration) seekTo(target);
       }
     };
     const onTime = () => {
-      setTime(v.currentTime || 0);
+      const now = v.currentTime || 0;
+      const lock = seekTargetRef.current;
+      // 锁着的时候：视频到了落点附近（或超时）就解开跟随，否则保持落点不动
+      if (lock) {
+        if (Math.abs(now - lock.t) <= 1 || Date.now() > lock.until) {
+          seekTargetRef.current = null;
+          setTime(now);
+        }
+      } else {
+        setTime(now);
+      }
       setDuration(v.duration || 0);
     };
     const onMeta = () => {
@@ -963,7 +1007,27 @@ function DuanjuPlayClient() {
     };
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
+    // 加载指示：等 waiting 亮、能播了灭。readyState 已经够的（划回来的一集）不闪。
+    // 能播时再对一次落点：加载期间设的 currentTime 可能被 hls 起播冲掉。
+    const onWaiting = () => setVideoLoading(true);
+    const onReady = () => {
+      setVideoLoading(false);
+      const lock = seekTargetRef.current;
+      if (
+        lock &&
+        Number.isFinite(v.duration) &&
+        v.duration > 0 &&
+        Math.abs((v.currentTime || 0) - lock.t) > 1
+      ) {
+        try {
+          v.currentTime = lock.t;
+        } catch {
+          /* noop */
+        }
+      }
+    };
     const onEnded = () => {
+      setVideoLoading(false);
       const total = detailRef.current?.episodes?.length || 0;
       // 刚切到这一集就 ended（多半是划回上一集时它的播放头还停在末尾）：
       // 从头重播，别顺延下一集，否则看起来就是「切回去又跳走」。
@@ -995,9 +1059,14 @@ function DuanjuPlayClient() {
     v.addEventListener('play', onPlay);
     v.addEventListener('pause', onPause);
     v.addEventListener('ended', onEnded);
-    setTime(v.currentTime || 0);
+    v.addEventListener('waiting', onWaiting);
+    v.addEventListener('playing', onReady);
+    v.addEventListener('canplay', onReady);
+    v.addEventListener('error', onReady);
+    setTime(seekTargetRef.current?.t ?? v.currentTime ?? 0);
     setDuration(v.duration || 0);
     setPlaying(!v.paused);
+    setVideoLoading(v.readyState < 3);
     if (v.readyState >= 1) onMeta();
     return () => {
       v.removeEventListener('timeupdate', onTime);
@@ -1005,6 +1074,10 @@ function DuanjuPlayClient() {
       v.removeEventListener('play', onPlay);
       v.removeEventListener('pause', onPause);
       v.removeEventListener('ended', onEnded);
+      v.removeEventListener('waiting', onWaiting);
+      v.removeEventListener('playing', onReady);
+      v.removeEventListener('canplay', onReady);
+      v.removeEventListener('error', onReady);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [episodeIndex, videoTick]);
@@ -1307,7 +1380,14 @@ function DuanjuPlayClient() {
   );
 
   /* ---------- 进度条拖拽 ---------- */
-  const pct = duration > 0 ? (seeking ? seekRatio : time / duration) * 100 : seeking ? seekRatio * 100 : 0;
+  const pct =
+    duration > 0
+      ? (seeking ? seekRatio : time / duration) * 100
+      : seeking
+        ? seekRatio * 100
+        : pendingSeekRatio != null
+          ? pendingSeekRatio * 100
+          : 0;
   const seekDisplayTime = seeking ? seekRatio * duration : time;
 
   const ratioFromX = useCallback((clientX: number) => {
@@ -1345,11 +1425,22 @@ function DuanjuPlayClient() {
       const ratio = ratioFromX(e.clientX);
       const v = videoRefs.current[episodeIndexRef.current];
       if (v && duration > 0) {
+        // 立刻记下落点：设完 currentTime 不会马上有 timeupdate，
+        // 不锁住的话条子会先弹回旧位置、等数据到了才跳过去
+        const t = ratio * duration;
         try {
-          v.currentTime = ratio * duration;
+          v.currentTime = t;
         } catch {
           /* noop */
         }
+        commitSeek(t);
+        pendingSeekRatioRef.current = null;
+        setPendingSeekRatio(null);
+      } else {
+        // 时长还没出来（元数据未到）：先记住落点，bar 停在手指松开的地方，
+        // loadedmetadata 时再真正定位
+        pendingSeekRatioRef.current = ratio;
+        setPendingSeekRatio(ratio);
       }
       setSeeking(false);
       // 拖完让时间多留一会儿，点一下（非拖动）也看得清
@@ -1498,7 +1589,7 @@ function DuanjuPlayClient() {
   return (
     <div
       id='djplayer'
-      className={`${clean ? 'clean' : ''} ${playing ? '' : 'paused'}`}
+      className={`${clean ? 'clean' : ''} ${playing ? '' : 'paused'} ${loading || videoLoading ? 'loading' : ''}`}
     >
       <style dangerouslySetInnerHTML={{ __html: LOCAL_CSS }} />
 
@@ -1530,14 +1621,18 @@ function DuanjuPlayClient() {
                     shouldPlay={ep === episodeIndex || ep === preplay}
                     speed={speed}
                     register={registerVideo}
-                    onFatal={() => showToast('播放失败，可尝试换源')}
+                    onFatal={() => {
+                      // 源彻底拉不动了，别再转圈
+                      setVideoLoading(false);
+                      showToast('播放失败，可尝试换源');
+                    }}
                   />
                 </div>
               ))}
           </div>
         </div>
 
-        {loading && (
+        {(loading || videoLoading) && (
           <div className='absolute inset-0 z-[2] flex items-center justify-center'>
             <span className='h-7 w-7 animate-spin rounded-full border-2 border-white/30 border-t-white/80' />
           </div>
