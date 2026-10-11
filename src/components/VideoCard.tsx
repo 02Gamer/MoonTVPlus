@@ -59,6 +59,7 @@ import { ImagePlaceholder } from '@/components/ImagePlaceholder';
 import ImageViewer from '@/components/ImageViewer';
 import MobileActionSheet from '@/components/MobileActionSheet';
 import TrailerPickerDialog from '@/components/TrailerPickerDialog';
+import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
 import type { TMDBVideoItem } from '@/lib/tmdb.client';
 
 export interface VideoCardProps {
@@ -153,6 +154,9 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
     ref
   ) {
     const router = useRouter();
+    const watchRoomContext = useWatchRoomContextSafe();
+    // 观影室状态下短剧不走竖屏沉浸播放页（/duanju/play 不支持房间同步）
+    const isInWatchRoom = Boolean(watchRoomContext?.currentRoom);
     const [showAnimeSubscribe, setShowAnimeSubscribe] = useState(false);
     const [animeSubscribeToast, setAnimeSubscribeToast] = useState('');
     const isAdminUser = useMemo(() => {
@@ -460,9 +464,11 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
           router.push(url);
         }
       } else if (actualSource && actualId) {
-        // 短剧走竖屏沉浸播放页，其余走普通播放页（本地设置可禁用竖屏模式）
+        // 短剧走竖屏沉浸播放页，其余走普通播放页（本地设置可禁用竖屏模式；观影室内也禁用）
         const playPath =
-          isDuanju && !isDuanjuVerticalDisabled() ? '/duanju/play' : '/play';
+          isDuanju && !isDuanjuVerticalDisabled() && !isInWatchRoom
+            ? '/duanju/play'
+            : '/play';
         // 检测当前是否已在目标播放页面
         const isCurrentlyOnPlayPage =
           typeof window !== 'undefined' && window.location.pathname === playPath;
@@ -502,6 +508,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       actualSearchType,
       onBeforeNavigate,
       isDuanju,
+      isInWatchRoom,
     ]);
 
     // 新标签页播放处理函数
@@ -540,7 +547,9 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       } else if (actualSource && actualId) {
         const url = appendSpecialSourceParam(
           `${
-            isDuanju && !isDuanjuVerticalDisabled() ? '/duanju/play' : '/play'
+            isDuanju && !isDuanjuVerticalDisabled() && !isInWatchRoom
+              ? '/duanju/play'
+              : '/play'
           }?source=${actualSource}&id=${actualId}&title=${encodeURIComponent(
             actualTitle
           )}${actualYear ? `&year=${actualYear}` : ''}${
@@ -566,6 +575,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(
       actualSearchType,
       onBeforeNavigate,
       isDuanju,
+      isInWatchRoom,
     ]);
 
     // 检查搜索结果的收藏状态

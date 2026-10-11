@@ -11255,10 +11255,11 @@ function PlayPageClient() {
                         )}
 
                         {/* 短剧模式：分类名命中短剧时，切到竖屏沉浸播放页
-                            （本地设置禁用竖屏模式时不出这个入口） */}
+                            （本地设置禁用竖屏模式、或处于观影室内时不出这个入口） */}
                         {currentSource &&
                           currentId &&
                           !duanjuVerticalDisabled &&
+                          !watchRoomContext?.currentRoom &&
                           isDuanjuTypeName(detail?.type_name || detail?.class || '') && (
                             <button
                               onClick={(e) => {

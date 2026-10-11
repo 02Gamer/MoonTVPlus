@@ -12,6 +12,7 @@ import React, {
 } from 'react';
 
 import DownloadEpisodeSelector from '@/components/DownloadEpisodeSelector';
+import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
 import { useDownload } from '@/contexts/DownloadContext';
 import {
   deleteFavorite,
@@ -578,6 +579,7 @@ function DuanjuPlayClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addDownloadTask } = useDownload();
+  const watchRoomContext = useWatchRoomContextSafe();
 
   const sourceParam = searchParams.get('source') || '';
   const idParam = searchParams.get('id') || '';
@@ -585,6 +587,27 @@ function DuanjuPlayClient() {
   const yearParam = searchParams.get('year') || '';
   const fileNameParam = searchParams.get('fileName') || '';
   const episodeParam = searchParams.get('episode');
+
+  // 观影室状态下不进入短剧竖屏沉浸播放页（/duanju/play 不支持房间同步），
+  // 直接入口（持久化记录/外部链接等）统一转回普通播放页。
+  useEffect(() => {
+    if (!watchRoomContext?.currentRoom) return;
+    const params = new URLSearchParams();
+    if (sourceParam) params.set('source', sourceParam);
+    if (idParam) params.set('id', idParam);
+    if (titleParam) params.set('title', titleParam);
+    if (yearParam) params.set('year', yearParam);
+    if (fileNameParam) params.set('fileName', fileNameParam);
+    router.replace(`/play?${params.toString()}`);
+  }, [
+    watchRoomContext?.currentRoom,
+    router,
+    sourceParam,
+    idParam,
+    titleParam,
+    yearParam,
+    fileNameParam,
+  ]);
 
   const [detail, setDetail] = useState<SearchResult | null>(null);
   const [episodeIndex, setEpisodeIndex] = useState(0);
