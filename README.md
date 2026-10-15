@@ -194,9 +194,21 @@ on:
    - 添加 `D1_DATABASE_ID` 并填入你的数据库 ID
    - 无需配置 `UPSTASH_URL` 和 `UPSTASH_TOKEN`
 
-**7. 配置外部定时任务（可选）**
+**7. 自定义 Wrangler 变量（可选）**
 
-可使用外部定时请求/api/cron/mtvpls端点以触发定时任务，或新建一个workers请求触发，推荐每小时请求一次。
+可通过 `VARS`（Repository secret 或 variable）把自定义变量写入 `wrangler.toml` 的 `[vars]`，每行一个 `KEY=VALUE`：
+
+```
+ENABLE_TVBOX_SUBSCRIBE=true
+FOO=bar
+```
+
+部署后会追加到 `[vars]`：
+
+```toml
+ENABLE_TVBOX_SUBSCRIBE = "true"
+FOO = "bar"
+```
 
 ---
 
