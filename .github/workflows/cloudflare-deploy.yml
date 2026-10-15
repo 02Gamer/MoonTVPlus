@@ -93,6 +93,9 @@ jobs:
           fi
 
       - name: Update wrangler.toml with environment variables
+        env:
+          # VARS 支持多行原始 TOML；通过 env 传递，避免多行写入 $GITHUB_ENV 时报错
+          VARS: ${{ secrets.VARS }}
         run: |
           # Function to append variable to wrangler.toml if it has a value
           append_var() {
@@ -140,6 +143,14 @@ jobs:
           append_var WATCH_ROOM_EXTERNAL_SERVER_AUTH "${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_AUTH }}"
           append_var WATCH_ROOM_EXTERNAL_SERVER_URL "${{ secrets.WATCH_ROOM_EXTERNAL_SERVER_URL }}"
           append_var WATCH_ROOM_SERVER_TYPE "${{ secrets.WATCH_ROOM_SERVER_TYPE }}"
+
+          # 追加自定义变量：VARS 的内容原样写入 [vars] 后面
+          # 支持多行，例如：
+          #   FOO = "bar"
+          #   BAZ = "qux"
+          if [ -n "$VARS" ]; then
+            printf '%s\n' "$VARS" >> wrangler.toml
+          fi
           
           echo "Updated wrangler.toml:"
           cat wrangler.toml
