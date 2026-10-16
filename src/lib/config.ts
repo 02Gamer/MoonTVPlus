@@ -736,28 +736,44 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
   );
 
   if (adminConfig.OpenListConfig) {
-    if (!adminConfig.OpenListConfig.RootPaths) {
-      adminConfig.OpenListConfig.RootPaths = adminConfig.OpenListConfig.RootPath
-        ? [adminConfig.OpenListConfig.RootPath]
-        : ['/'];
+    // 兼容已废弃的「离线下载独立 OpenList 源」字段（仅存在于旧配置里）
+    const ol = adminConfig.OpenListConfig as typeof adminConfig.OpenListConfig & {
+      OfflineDownloadUseCustomSource?: boolean;
+      OfflineDownloadURL?: string;
+      OfflineDownloadUsername?: string;
+      OfflineDownloadPassword?: string;
+    };
+
+    if (!ol.RootPaths) {
+      ol.RootPaths = ol.RootPath ? [ol.RootPath] : ['/'];
     }
-    if (!adminConfig.OpenListConfig.OfflineDownloadPath) {
-      adminConfig.OpenListConfig.OfflineDownloadPath = '/';
+    if (!ol.OfflineDownloadPath) {
+      ol.OfflineDownloadPath = '/';
     }
-    if (
-      adminConfig.OpenListConfig.OfflineDownloadUseCustomSource === undefined
-    ) {
-      adminConfig.OpenListConfig.OfflineDownloadUseCustomSource = false;
+
+    // 迁移：旧的独立离线下载源 → 备用源列表 + 离线下载目录加「源名@」前缀
+    if (!Array.isArray(ol.ExtraSources)) {
+      ol.ExtraSources = [];
+      if (ol.OfflineDownloadUseCustomSource && ol.OfflineDownloadURL) {
+        const name = '离线下载';
+        ol.ExtraSources.push({
+          name,
+          url: ol.OfflineDownloadURL,
+          username: ol.OfflineDownloadUsername || '',
+          password: ol.OfflineDownloadPassword || '',
+        });
+        if (!(ol.OfflineDownloadPath || '').includes('@')) {
+          ol.OfflineDownloadPath = `${name}@${ol.OfflineDownloadPath || '/'}`;
+        }
+      }
     }
-    if (adminConfig.OpenListConfig.OfflineDownloadURL === undefined) {
-      adminConfig.OpenListConfig.OfflineDownloadURL = '';
-    }
-    if (adminConfig.OpenListConfig.OfflineDownloadUsername === undefined) {
-      adminConfig.OpenListConfig.OfflineDownloadUsername = '';
-    }
-    if (adminConfig.OpenListConfig.OfflineDownloadPassword === undefined) {
-      adminConfig.OpenListConfig.OfflineDownloadPassword = '';
-    }
+
+    // 清理已废弃字段（下次保存后不再落库）
+    delete ol.OfflineDownloadUseCustomSource;
+    delete ol.OfflineDownloadURL;
+    delete ol.OfflineDownloadUsername;
+    delete ol.OfflineDownloadPassword;
+
     if (adminConfig.OpenListConfig.PathMeta === undefined) {
       adminConfig.OpenListConfig.PathMeta = {};
     } else {
@@ -1159,9 +1175,13 @@ export function configSelfCheck(adminConfig: AdminConfig): AdminConfig {
     adminConfig.OpenListConfig.URL = normalizeApiBaseUrl(
       adminConfig.OpenListConfig.URL
     );
-    adminConfig.OpenListConfig.OfflineDownloadURL = normalizeApiBaseUrl(
-      adminConfig.OpenListConfig.OfflineDownloadURL
-    );
+    if (Array.isArray(adminConfig.OpenListConfig.ExtraSources)) {
+      adminConfig.OpenListConfig.ExtraSources =
+        adminConfig.OpenListConfig.ExtraSources.map((s) => ({
+          ...s,
+          url: normalizeApiBaseUrl(s.url),
+        }));
+    }
   }
 
   if (adminConfig.MusicConfig) {
