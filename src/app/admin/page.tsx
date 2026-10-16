@@ -9626,6 +9626,7 @@ const ConfigFileComponent = ({
   const [subscriptionUrl, setSubscriptionUrl] = useState('');
   const [autoUpdate, setAutoUpdate] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState<string>('');
+  const [subscriptionProxy, setSubscriptionProxy] = useState('');
 
   useEffect(() => {
     if (config?.ConfigFile) {
@@ -9635,6 +9636,7 @@ const ConfigFileComponent = ({
       setSubscriptionUrl(config.ConfigSubscribtion.URL);
       setAutoUpdate(config.ConfigSubscribtion.AutoUpdate);
       setLastCheckTime(config.ConfigSubscribtion.LastCheck || '');
+      setSubscriptionProxy(config.ConfigSubscribtion.Proxy || '');
     }
   }, [config]);
 
@@ -9650,7 +9652,10 @@ const ConfigFileComponent = ({
         const resp = await fetch('/api/admin/config_subscription/fetch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: subscriptionUrl }),
+          body: JSON.stringify({
+            url: subscriptionUrl,
+            proxy: subscriptionProxy,
+          }),
         });
 
         if (!resp.ok) {
@@ -9773,6 +9778,7 @@ const ConfigFileComponent = ({
             subscriptionUrl,
             autoUpdate,
             lastCheckTime: lastCheckTime || new Date().toISOString(),
+            proxy: subscriptionProxy,
           }),
         });
 
@@ -9831,6 +9837,20 @@ const ConfigFileComponent = ({
             <p className='mt-2 text-xs text-gray-500 dark:text-gray-400'>
               输入配置文件的订阅地址，要求 JSON 格式，且使用 Base58 编码
             </p>
+          </div>
+
+          {/* 拉取配置代理 */}
+          <div>
+            <label className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3'>
+              拉取配置代理
+            </label>
+            <input
+              type='text'
+              value={subscriptionProxy}
+              onChange={(e) => setSubscriptionProxy(e.target.value)}
+              placeholder='http://127.0.0.1:7890（可选）'
+              className='w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 shadow-sm hover:border-gray-400 dark:hover:border-gray-500'
+            />
           </div>
 
           {/* 拉取配置按钮 */}

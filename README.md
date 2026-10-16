@@ -527,6 +527,7 @@ dockge/komodo 等 docker compose UI 也有自动更新功能
 | MAGNET_HEALTH_MAX_CONCURRENT             | 动漫磁力测活全站同时进行的最大任务数（进程内）               | 1-100                       | 10                                                           |
 | INIT_CONFIG                              | 初始配置（JSON 格式，包含 api_site、custom_category、lives 等） | JSON 字符串                 | (空)                                                         |
 | CONFIG_SUBSCRIPTION_URL                  | 配置订阅 URL（Base58 编码的配置文件地址，优先级高于 INIT_CONFIG） | URL                         | (空)                                                         |
+| CONFIG_SUBSCRIPTION_PROXY                | 拉取配置代理（拉取配置订阅时使用的 HTTP 代理）               | URL                         | (空)                                                         |
 | TMDB_API_KEY                             | TMDB API 密钥                                                | 任意字符串                  | (空)                                                         |
 | TMDB_PROXY                               | TMDB 代理地址                                                | URL                         | (空)                                                         |
 | TMDB_REVERSE_PROXY                       | TMDB 反向代理地址                                            | URL                         | (空)                                                         |

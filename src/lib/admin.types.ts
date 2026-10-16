@@ -3,6 +3,9 @@ export interface AdminConfig {
     URL: string;
     AutoUpdate: boolean;
     LastCheck: string;
+    // 拉取配置代理：拉取配置订阅时使用的 HTTP 代理，留空则回退到环境变量
+    // CONFIG_SUBSCRIPTION_PROXY
+    Proxy?: string;
   };
   ConfigFile: string;
   SiteConfig: {

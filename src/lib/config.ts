@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { normalizeApiBaseUrl } from '@/lib/url';
 
 import { AdminConfig } from './admin.types';
+import { fetchConfigSubscription } from './config-subscription';
 import { setServerTmdbImageBaseUrl } from './tmdb-image-base';
 
 const BUILTIN_DANMAKU_API_BASE = 'https://mtvpls-danmu.netlify.app/87654321';
@@ -239,20 +240,27 @@ async function getInitConfig(
     URL: string;
     AutoUpdate: boolean;
     LastCheck: string;
+    Proxy?: string;
   } = {
     URL: '',
     AutoUpdate: false,
     LastCheck: '',
+    Proxy: process.env.CONFIG_SUBSCRIPTION_PROXY || '',
   }
 ): Promise<AdminConfig> {
   let cfgFile: ConfigFileStruct;
+
+  // 拉取配置代理：配置订阅未设置时回退到环境变量 CONFIG_SUBSCRIPTION_PROXY
+  if (!subConfig.Proxy) {
+    subConfig.Proxy = process.env.CONFIG_SUBSCRIPTION_PROXY || '';
+  }
 
   // 优先从环境变量读取订阅 URL
   const envSubUrl = process.env.CONFIG_SUBSCRIPTION_URL || '';
 
   if (envSubUrl) {
     try {
-      const response = await fetch(envSubUrl);
+      const response = await fetchConfigSubscription(envSubUrl);
       if (response.ok) {
         const configContent = await response.text();
         const bs58 = (await import('bs58')).default;
