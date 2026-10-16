@@ -5577,15 +5577,19 @@ function PlayPageClient() {
         // 异步获取其他源信息，不阻塞播放
         setBackgroundSourcesLoading(true);
         fetchSourcesData(searchTitle || videoTitle).then((sources) => {
-          // 合并当前源和搜索到的其他源
-          const allSources = [...sourcesInfo];
-          sources.forEach((source) => {
-            // 避免重复添加当前源
-            if (!(source.source === currentSource && source.id === currentId)) {
-              allSources.push(source);
+          // 合并当前源和搜索到的其他源。
+          // 注意：命中缓存时 sourcesInfo 已经是完整源列表，直接拼接会和搜索结果重复，
+          // 必须按 source+id 去重（当前源的详情保留在前，信息更全）。
+          const mergedSources = new Map<string, SearchResult>();
+          [...sourcesInfo, ...sources].forEach((source) => {
+            const key = `${source.source}-${source.id}`;
+            if (!mergedSources.has(key)) {
+              mergedSources.set(key, source);
             }
           });
-          setAvailableSources(applyCorrectionsToSources(allSources));
+          setAvailableSources(
+            applyCorrectionsToSources(Array.from(mergedSources.values()))
+          );
           setBackgroundSourcesLoading(false);
         }).catch((err) => {
           console.error('异步获取其他源失败:', err);
