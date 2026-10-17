@@ -235,21 +235,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // 验证每个备用源
-      for (const source of normalizedExtraSources) {
-        try {
-          console.log(`[OpenList Config] 验证备用源「${source.name}」`);
-          await OpenListClient.login(source.url, source.username, source.password);
-          console.log(`[OpenList Config] 备用源「${source.name}」验证成功`);
-        } catch (error) {
-          return NextResponse.json(
-            {
-              error: `备用源「${source.name}」验证失败: ${(error as Error).message}`,
-            },
-            { status: 400 }
-          );
-        }
-      }
+      // 备用源只做表单校验（上方字段完整性），保存时不验证连通性；
+      // 连通性由管理面板里每个备用源单独的「检测」按钮负责。
 
       adminConfig.OpenListConfig = {
         Enabled: true,
