@@ -2,6 +2,7 @@
 
 import { API_CONFIG, getAvailableApiSites } from '@/lib/config';
 import { db } from '@/lib/db';
+import { parseJsonLosslessIntegers } from '@/lib/json';
 import { isDuanjuTypeName } from '@/lib/duanju.client';
 
 export { isDuanjuTypeName };
@@ -66,7 +67,9 @@ export async function getDuanjuSources(): Promise<DuanjuSource[]> {
           return null;
         }
 
-        const data: CmsClassResponse = await response.json();
+        const data = parseJsonLosslessIntegers<CmsClassResponse>(
+          await response.text()
+        );
 
         // 检查是否有短剧分类
         if (data.class && Array.isArray(data.class)) {
