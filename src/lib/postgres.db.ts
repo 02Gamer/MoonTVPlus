@@ -47,39 +47,12 @@ import { dispatchNotificationChannels } from './notification-dispatch';
  */
 export class PostgresStorage implements IStorage {
   private db: DatabaseAdapter;
-  private schemaReady: Promise<void>;
   public adapter: any; // 用于兼容
 
   constructor(adapter: DatabaseAdapter) {
     this.db = adapter;
-    this.schemaReady = this.ensureExtraColumns();
     // 创建一个简单的适配器用于设备管理
     this.adapter = new PostgresRedisHashAdapter(adapter);
-  }
-
-  /** 补齐历史库缺的列（新库由 migrations/postgres/*.sql 一次建全） */
-  private async ensureExtraColumns(): Promise<void> {
-    const statements = [
-      'ALTER TABLE manga_shelf ADD COLUMN IF NOT EXISTS latest_chapter_id TEXT',
-      'ALTER TABLE manga_shelf ADD COLUMN IF NOT EXISTS latest_chapter_name TEXT',
-      'ALTER TABLE manga_shelf ADD COLUMN IF NOT EXISTS latest_chapter_count INTEGER',
-      'ALTER TABLE manga_shelf ADD COLUMN IF NOT EXISTS unread_chapter_count INTEGER',
-      'ALTER TABLE play_records ADD COLUMN IF NOT EXISTS is_duanju INTEGER DEFAULT 0',
-    ];
-
-    for (const statement of statements) {
-      try {
-        const result = await this.db.prepare(statement).run();
-        if (!result.success && result.error) {
-          console.warn(
-            'PostgresStorage.ensureExtraColumns warning:',
-            result.error
-          );
-        }
-      } catch (err) {
-        console.warn('PostgresStorage.ensureExtraColumns warning:', err);
-      }
-    }
   }
 
   // ==================== 播放记录 ====================
@@ -108,8 +81,6 @@ export class PostgresStorage implements IStorage {
     record: PlayRecord
   ): Promise<void> {
     try {
-      // 老库可能还没建 is_duanju 列，等补齐再写
-      await this.schemaReady;
       await this.db
         .prepare(
           `
@@ -2184,7 +2155,6 @@ export class PostgresStorage implements IStorage {
     key: string
   ): Promise<MangaShelfItem | null> {
     try {
-      await this.schemaReady;
       const result = await this.db
         .prepare('SELECT * FROM manga_shelf WHERE username = $1 AND key = $2')
         .bind(userName, key)
@@ -2228,7 +2198,6 @@ export class PostgresStorage implements IStorage {
     item: MangaShelfItem
   ): Promise<void> {
     try {
-      await this.schemaReady;
       await this.db
         .prepare(
           `
@@ -2286,7 +2255,6 @@ export class PostgresStorage implements IStorage {
     userName: string
   ): Promise<{ [key: string]: MangaShelfItem }> {
     try {
-      await this.schemaReady;
       const results = await this.db
         .prepare(
           'SELECT * FROM manga_shelf WHERE username = $1 ORDER BY save_time DESC'
