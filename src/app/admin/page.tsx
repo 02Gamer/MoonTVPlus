@@ -7046,6 +7046,7 @@ const VideoSourceConfig = ({
   const { isLoading, withLoading } = useLoadingState();
   const [sources, setSources] = useState<DataSource[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingSource, setEditingSource] = useState<DataSource | null>(null);
   const [orderChanged, setOrderChanged] = useState(false);
   const [newSource, setNewSource] = useState<DataSource>({
     name: '',
@@ -7392,6 +7393,27 @@ const VideoSourceConfig = ({
       setShowAddForm(false);
     }).catch(() => {
       console.error('操作失败', 'add', newSource);
+    });
+  };
+
+  const handleEditSource = (source: DataSource) => {
+    setEditingSource({ ...source });
+    setShowAddForm(false);
+  };
+
+  const handleUpdateSource = () => {
+    if (!editingSource || !editingSource.name || !editingSource.api) return;
+    withLoading('updateSource', async () => {
+      await callSourceApi({
+        action: 'update',
+        key: editingSource.key,
+        name: editingSource.name,
+        api: editingSource.api,
+        detail: editingSource.detail,
+      });
+      setEditingSource(null);
+    }).catch(() => {
+      console.error('操作失败', 'update', editingSource);
     });
   };
 
@@ -7923,17 +7945,25 @@ const VideoSourceConfig = ({
             {!source.disabled ? '禁用' : '启用'}
           </button>
           {source.from !== 'config' && (
-            <button
-              onClick={() => handleDelete(source.key)}
-              disabled={isLoading(`deleteSource_${source.key}`)}
-              className={`${buttonStyles.roundedSecondary} ${
-                isLoading(`deleteSource_${source.key}`)
-                  ? 'opacity-50 cursor-not-allowed'
-                  : ''
-              }`}
-            >
-              删除
-            </button>
+            <>
+              <button
+                onClick={() => handleEditSource(source)}
+                className={buttonStyles.roundedPrimary}
+              >
+                编辑
+              </button>
+              <button
+                onClick={() => handleDelete(source.key)}
+                disabled={isLoading(`deleteSource_${source.key}`)}
+                className={`${buttonStyles.roundedSecondary} ${
+                  isLoading(`deleteSource_${source.key}`)
+                    ? 'opacity-50 cursor-not-allowed'
+                    : ''
+                }`}
+              >
+                删除
+              </button>
+            </>
           )}
         </td>
       </tr>
@@ -8411,6 +8441,107 @@ const VideoSourceConfig = ({
               }`}
             >
               {isLoading('addSource') ? '添加中...' : '添加'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑视频源表单 */}
+      {editingSource && (
+        <div className='p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4'>
+          <div className='flex items-center justify-between'>
+            <h5 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+              编辑视频源: {editingSource.name}
+            </h5>
+            <button
+              onClick={() => setEditingSource(null)}
+              className='text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              aria-label='关闭编辑'
+            >
+              ✕
+            </button>
+          </div>
+          <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                名称
+              </label>
+              <input
+                type='text'
+                value={editingSource.name}
+                onChange={(e) =>
+                  setEditingSource((prev) =>
+                    prev ? { ...prev, name: e.target.value } : null
+                  )
+                }
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+              />
+            </div>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                Key（不可编辑）
+              </label>
+              <input
+                type='text'
+                value={editingSource.key}
+                disabled
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+              />
+            </div>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                API 地址
+              </label>
+              <input
+                type='text'
+                value={editingSource.api}
+                onChange={(e) =>
+                  setEditingSource((prev) =>
+                    prev ? { ...prev, api: e.target.value } : null
+                  )
+                }
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+              />
+            </div>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                Detail 地址（选填）
+              </label>
+              <input
+                type='text'
+                value={editingSource.detail || ''}
+                onChange={(e) =>
+                  setEditingSource((prev) =>
+                    prev ? { ...prev, detail: e.target.value } : null
+                  )
+                }
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+              />
+            </div>
+          </div>
+          <div className='flex justify-end gap-2'>
+            <button
+              onClick={() => setEditingSource(null)}
+              className={buttonStyles.secondary}
+            >
+              取消
+            </button>
+            <button
+              onClick={handleUpdateSource}
+              disabled={
+                !editingSource.name ||
+                !editingSource.api ||
+                isLoading('updateSource')
+              }
+              className={`px-4 py-2 ${
+                !editingSource.name ||
+                !editingSource.api ||
+                isLoading('updateSource')
+                  ? buttonStyles.disabled
+                  : buttonStyles.success
+              }`}
+            >
+              {isLoading('updateSource') ? '保存中...' : '保存'}
             </button>
           </div>
         </div>
